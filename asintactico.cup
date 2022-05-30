@@ -1,0 +1,407 @@
+ 
+   
+package analiLexer;
+
+/* Import the class java_cup.runtime.*  */
+import java_cup.runtime.*;
+import java.io.FileReader;
+import java.io.PrintWriter;
+import java.util.ArrayList;
+   
+/* Codigo del parser, se copia integramente a la clase final.
+    Agregamos el manejo de errores. */
+parser code {:
+    public static Programa programa;
+    private static ArrayList<ArrayList<Sentencia>> bloques;
+    
+    public static void addBloque(){
+      ArrayList<Sentencia> bloque = new ArrayList<Sentencia>();
+      bloques.add(0,bloque);
+    }
+
+    private static ArrayList<Sentencia> getTop(){
+      if(!bloques.isEmpty()){
+        return bloques.get(0);
+      }else{
+        throw new Error("Bloque inexistente"); 
+      }
+    }
+
+    public static void addSentencia(Sentencia s){
+      ArrayList<Sentencia> bloque = AnalizadorSintactico.getTop();
+      bloque.add(s);
+    }
+
+    public static ArrayList<Sentencia> removeTop(){
+      if(!bloques.isEmpty()){
+        return bloques.remove(0);
+      }else{
+        throw new Error("Bloque inexistente"); 
+      }
+    }
+
+
+
+    /* Reporte de error encontrado. */
+    public void report_error(String message, Object info) {
+        StringBuilder m = new StringBuilder("Error");
+        if (info instanceof java_cup.runtime.Symbol) {
+            java_cup.runtime.Symbol s = ((java_cup.runtime.Symbol) info);
+            if (s.left >= 0) {                
+                m.append(" in line "+(s.left+1));
+                if (s.right >= 0)
+                    m.append(", column "+(s.right+1));
+            }
+        }
+        m.append(" : "+message);
+        System.err.println(m);
+    }
+   
+    /* Cuando se encuentra un error de donde el sistema no puede
+        recuperarse, se lanza un error fatal. Se despliega el mensaje
+        de error y se finaliza la ejecucion. */
+    public void report_fatal_error(String message, Object info) {
+        report_error(message, info);
+        System.exit(1);
+    }
+
+    /* Metodo main para garantizar la ejecucion del analizador
+       lexico y sintactico, ademas que se pase como parametro la tabla
+       de simbolos correspondiente. */
+    public static void main(String[] args){
+        try {
+	    programa = new Programa();
+      bloques = new ArrayList<ArrayList<Sentencia>>();
+            AnalizadorSintactico asin = new AnalizadorSintactico(
+                    new AnalizadorLexico( new FileReader(args[0])));
+            Object result = asin.parse().value;
+	    programa.ejecutar();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+    }
+:};
+   
+
+   
+/* ------------Declaracion de simbolos terminales y no terminales---------- */
+   
+/* Terminales (tokens obtenidos por el analizador lexico).  
+
+   Terminales que no tienen un valor son listados primero, los terminales que
+   tienen un valor como los enteros son listados en la segunda o demas lineas. */
+terminal           SEMI, OP_SUMA, OP_RESTA, OP_MULT, PARENIZQ, PARENDER,
+		   OP_ASIGN, OP_IGUAL, OP_DIFER, OP_MENOR, LLAVEIZQ, LLAVEDER,
+       OP_AND, OP_OR, OP_NOT, OP_SI, OP_NO, IMPRIMIR;
+terminal String    CADENA;
+terminal  Integer  ENTERO;
+terminal  Simbolo  ID;
+   
+/* No terminales usados en la seccion gramatical. 
+
+   Primero se lista los no terminales que tienen un valor Object y despues
+   se lista los no terminales que tienen un entero. Un Object se refiere a que
+   no tienen tipo, pudiendo serx entero o String. */
+non terminal Object      expr_list, expr_part, bloque_list, bloque_part;
+non terminal Expresion   expr, factor, termino;
+non terminal Asignacion  asign;
+non terminal Concatenar  concatenar;
+non terminal Imprimir    imprime;
+non terminal Condicion   condicion, relacion, relacion_term;
+non terminal ArrayList<Sentencia> bloque;
+non terminal SiNo        sino;
+   
+
+/* -------------Seccion de predencia y a3*(2+3*4)+1sociacion de los 
+terminales----------- */
+   
+/*
+  Precedencia de los no terminales, no sirve con simbolos terminales.
+  Por eso no la usamos. Además indica si se asocia a izquierda o derecha.
+*/
+  /*precedence left OP_SUMA, OP_RESTA; 
+  precedence left OP_MULT;*/
+
+
+/* ------------------- Seccion de la gramatica ------------------------ */
+   
+/* La gramatica de nuestro analizador.
+   
+   expr_list ::=   expr_list expr_part
+                 | expr_part
+   expr_part ::=   expr SEMI
+   expr      ::=   expr PLUS factorreturn a.ejecutar() + b.ejecutar();
+                 | expr MINUS factor
+                 | factor
+   factor    ::=   factor TIMES term
+                 | factor DIVIDE term
+                 | term
+   term     ::=    LPAREN expr RPAREN
+                 | NUMBERreturn a.ejecutar() + b.ejecutar();
+                 | ID     
+*/
+   
+/* 'expr_list' es la raiz de la gramatica. Una 'expr_list' puede ser una 'expr_list'
+   seguida de una expr_part, o puede ser una expr_part.
+   Un terminal o no terminal se define <termino> ::= termino1 termino2 ... terminoN.;
+   donde termino puede ser terminal o no terminal, solo se permite un simbolo a la
+   izquierda. La | sirve para indicar que es una produccion u otra.
+   Debemos pasar de simbolos no terminales a simbolos terminales. Una gramatica que no
+   termina en simbolos terminales se dice que no reduce, y por lo tanto nunca se 
+finaliza{:
+		    RESULT = e;
+		  :}
+   su procesado.
+*/
+   
+    expr_list ::= expr_list expr_part
+                  |
+                  expr_part
+                  ;
+/* 'expr_part' se compone de una expr seguida de SEMI, o de una asign seguida de SEMI.
+   asign:a esta estableciendo que a representa al objeto asociado a asign, entre {: :}
+   se coloca el sodigo en java para las acciones a tomar al cumplirse una produccion.
+*/
+   
+   expr_part ::= expr:e
+                  {:
+		                AnalizadorSintactico.programa.add(e);
+                    RESULT = e;
+                  :} 
+                  SEMI
+                 |
+                 asign:a
+            		  {:
+            		    AnalizadorSintactico.programa.add(a);
+                    RESULT = a;
+            		  :}
+            		  SEMI
+                  |
+                  sino:sn
+                  {:
+                    AnalizadorSintactico.programa.add(sn);
+                    RESULT = sn;
+                  :}
+                  | 
+                    imprime:i
+                    {:
+                      AnalizadorSintactico.programa.add(i);
+                      RESULT = i;
+                    :}
+                    SEMI
+                  ;
+
+  
+  bloque ::= LLAVEIZQ bloque_list LLAVEDER
+            {:
+              RESULT = AnalizadorSintactico.removeTop();
+            :}
+            ;
+            
+  bloque_list ::= bloque_list bloque_part
+                  |
+                  bloque_part
+                  ;
+
+  bloque_part ::= expr:e
+                  {:
+                    AnalizadorSintactico.addSentencia(e);
+                    RESULT = e;
+                  :} 
+                  SEMI
+                 |
+                 asign:a
+                  {:
+                    AnalizadorSintactico.addSentencia(a);
+                    RESULT = a;
+                  :}
+                  SEMI
+                  |
+                  sino:sn
+                  {:
+                    AnalizadorSintactico.addSentencia(sn);
+                    RESULT = sn;
+                  :}
+                  | 
+                    imprime:i 
+                    {:
+                      AnalizadorSintactico.addSentencia(i);
+                      RESULT = i;
+                    :}
+                    SEMI
+                  ;            
+    
+  sino ::= OP_SI PARENIZQ relacion: r PARENDER bloque:si OP_NO bloque:no
+            {:
+              SiNo sn = new SiNo(r, si, no);
+              RESULT = sn;
+            :}
+            ;
+
+  condicion ::=  expr:a OP_IGUAL expr:b
+            {:
+              Condicion c = new Condicion(a, "==", b);
+              RESULT = c;
+            :}
+            |
+            expr:a OP_DIFER expr:b
+            {:
+              Condicion c = new Condicion(a, "!=", b);
+              RESULT = c;
+            :}
+            |
+            expr:a OP_MENOR expr:b
+            {:
+              Condicion c = new Condicion(a, "<", b);
+              RESULT = c;
+            :}
+            ;
+
+  relacion ::=  relacion:r OP_AND condicion:c
+            {:
+              Condicion res = new Condicion(r, "&", c);
+              RESULT = res;
+            :}
+            |
+            relacion:r OP_OR condicion:c
+            {:
+
+              Condicion res = new Condicion(r, "|", c);
+              RESULT = res;
+            :}
+            |
+            relacion_term: r
+            {:
+              RESULT = r;
+            :}
+            
+            ;
+
+relacion_term ::= 
+            PARENIZQ relacion:r PARENDER
+            {:
+              RESULT = r;
+            :}
+            |
+            condicion:c
+            {:
+              RESULT = c;
+            :}
+            |
+            OP_NOT PARENIZQ relacion:r PARENDER
+            {:
+              Condicion res = new Condicion(r, "!");
+              RESULT = res;
+            :}
+            ;
+
+  /*Para imprimir por consola*/
+  imprime    ::= IMPRIMIR PARENIZQ concatenar:c PARENDER
+                    {:
+                      Imprimir imprimir = new Imprimir(c);
+                      RESULT = imprimir;
+                    :}
+                  ;
+
+  /*Para manejar cadenas y concatenar al imprimir */
+   concatenar ::= CADENA:s OP_SUMA concatenar:c
+                    {:
+                      Concatenar con = new Concatenar(s,c);
+                      RESULT = con; 
+                    :}
+                  |
+                  ENTERO:e OP_SUMA concatenar:c
+                    {: 
+                      Concatenar con = new Concatenar(e,c);
+                      RESULT = con; 
+                    :}
+                  |
+                  ID:id OP_SUMA concatenar:c
+                    {:
+                      Concatenar con = new Concatenar(id,c);
+                      RESULT = con; 
+                    :}
+                  |
+                  CADENA:c
+                    {:
+                      Concatenar con = new Concatenar(c,null); 
+                      RESULT = con; 
+                    :}
+                  |
+                  ENTERO:e
+                    {: 
+                      Concatenar con = new Concatenar(e,null);
+                      RESULT = con; 
+                    :}
+                  |
+                  ID:id
+                    {:
+                      Concatenar con = new Concatenar(id,null);
+                      RESULT = con;
+                    :}
+                  ;
+
+
+  asign      ::=  ID:id OP_ASIGN expr:e
+		  {:
+		    Asignacion a = new Asignacion(id, e);
+		    RESULT = a;
+		  :}
+		  ;
+
+    /* 'expr' puede ser una expresion que inicia por numero entero op_suma expr,
+    de esa forma se realiza una suma. Tambien puede ser un numero entero, con 
+  estonull
+    se devuelve el valor del entero. En RESULT se almacena el valor de las acciones,
+    y se pasa al siguiente nivel de la gramatica.
+  */ 
+   expr      ::=  expr:e OP_SUMA factor:f
+                  {:
+		    Expresion ex = new Expresion(e, "+", f);
+                    RESULT = ex;
+                  :}
+                  |
+                  expr:e OP_RESTA factor:f
+                  {:
+		    Expresion ex = new Expresion(e, "-", f);
+                    RESULT =  ex;
+                  :}
+                  |
+                  factor:n
+                  {:
+		    Expresion ex = new Expresion(n);
+                    RESULT = ex;
+                  :}
+                  ;
+
+factor        ::=  factor:f OP_MULT termino:t
+                  {:
+		                Expresion ex = new Expresion(f, "*", t);
+                    RESULT =  ex;
+                  :}
+                  |
+                  termino:t
+                  {:
+		                Expresion ex = new Expresion(t);
+                    RESULT = t;
+                  :}
+                  ;
+
+termino       ::=  PARENIZQ expr:e PARENDER
+                  {:
+                    Expresion ex = new Expresion(e);
+                    RESULT = ex;
+                  :}
+                  |
+                  ID:id
+            		   {:
+            		      Expresion ex = new Expresion(id);
+            		      RESULT = ex;
+            		   :}
+                  |
+                  ENTERO:e
+                  {:
+		                Expresion ex = new Expresion(e);
+                    RESULT = ex;
+                  :}
+                  ; 
